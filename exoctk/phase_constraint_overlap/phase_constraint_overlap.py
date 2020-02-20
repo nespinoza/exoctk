@@ -77,6 +77,8 @@ def calculate_obsDur(transitDur):
 def drsky_2prime(x, ecc, omega, inc):
     ''' Second derivative of function drsky
 
+    This is the second derivative with respect to f of equation (5) in Winn (2010; https://arxiv.org/abs/1001.2010v5).
+
     Parameters
     ----------
 
@@ -107,6 +109,8 @@ def drsky_2prime(x, ecc, omega, inc):
 
 def drsky_prime(x, ecc, omega, inc):
     ''' Derivative of function drsky
+
+    This is the first derivative with respect to f of equation (5) in Winn (2010; https://arxiv.org/abs/1001.2010v5).
 
     Parameters
     ----------
@@ -140,6 +144,9 @@ def drsky_prime(x, ecc, omega, inc):
 def drsky(x, ecc, omega, inc):
     ''' Function whose roots we wish to find to obtain time of secondary (and primary) eclipse(s)
 
+    This is the projected distance of the planetary orbit in the X-Y plane of the sky. This is equation (5) 
+    in Winn (2010; https://arxiv.org/abs/1001.2010v5).
+
     Parameters
     ----------
 
@@ -168,6 +175,10 @@ def drsky(x, ecc, omega, inc):
 
 def getE(f,ecc):
     """ Function that returns the eccentric anomaly
+
+    Note normally this is defined in terms of cosines (see, e.g., Section 2.4 in Murray and Dermott), but numerically 
+    this is troublesome because the arccosine doesn't handle negative numbers by definition (equation 2.43). That's why 
+    the arctan version is better as signs are preserved (derivation is also in the same section, equation 2.46).
 
     Parameters
     ----------
@@ -207,7 +218,7 @@ def getM(E, ecc):
 def calculate_tsec(period, ecc, omega, inc, t0 = None, tperi = None):
     ''' Function to calculate the time of secondary eclipse. 
       
-        This uses Halley's method to first find the true anomaly (f) at which secondary eclipse occurs, 
+        This uses Halley's method (Newton-Raphson, but using second derivatives) to first find the true anomaly (f) at which secondary eclipse occurs, 
         then uses this to get the eccentric anomaly (E) at secondary eclipse, which gives the mean anomaly (M) at secondary 
         eclipse using Kepler's equation. This finally leads to the time of secondary eclipse using the definition of the mean 
         anomaly (M = n*(t - tau) --- here tau is the time of pericenter passage, n = 2*pi/period the mean motion).
