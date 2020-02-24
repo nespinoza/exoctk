@@ -77,7 +77,7 @@ def calculate_obsDur(transitDur):
 def drsky_2prime(x, ecc, omega, inc):
     ''' Second derivative of function drsky
 
-    This is the second derivative with respect to f of equation (5) in Winn (2010; https://arxiv.org/abs/1001.2010v5).
+    This is the second derivative with respect to f of the drsky function. 
 
     Parameters
     ----------
@@ -110,7 +110,7 @@ def drsky_2prime(x, ecc, omega, inc):
 def drsky_prime(x, ecc, omega, inc):
     ''' Derivative of function drsky
 
-    This is the first derivative with respect to f of equation (5) in Winn (2010; https://arxiv.org/abs/1001.2010v5).
+    This is the first derivative with respect to f of the drsky function. 
 
     Parameters
     ----------
@@ -144,8 +144,9 @@ def drsky_prime(x, ecc, omega, inc):
 def drsky(x, ecc, omega, inc):
     ''' Function whose roots we wish to find to obtain time of secondary (and primary) eclipse(s)
 
-    This is the projected distance of the planetary orbit in the X-Y plane of the sky. This is equation (5) 
-    in Winn (2010; https://arxiv.org/abs/1001.2010v5).
+    When one takes the derivative of equation (5) in Winn (2010; https://arxiv.org/abs/1001.2010v5), and equates that to zero (to find the 
+    minimum/maximum of said function), one gets to an equation of the form g(x) = 0. This function (drsky) is g(x), where x is the true 
+    anomaly.
 
     Parameters
     ----------
@@ -163,7 +164,6 @@ def drsky(x, ecc, omega, inc):
     -------
     drsky : float
       Function evaluated at x, ecc, omega, inc '''
-
 
     sq_sini = np.sin(inc)**2
     sin_o_p_f = np.sin(x+omega)
@@ -215,7 +215,43 @@ def getM(E, ecc):
 
     return E - ecc*np.sin(E)
 
-def calculate_tsec(period, ecc, omega, inc, t0 = None, tperi = None):
+def getLTT(a, c, ecc, omega, inc, f):
+    ''' Function that calculates the Light Travel Time (LTT) for eclipses and transit
+
+        This function returns the light travel time of an eclipse or transit given the orbital parameters, 
+        the semi-major axis of the orbit and the speed of light. Consistent units must be used for the latter 
+        two parameters. The returned time is in the units of time given by the speed of light input parameter.
+
+        Parameters
+        ----------
+        a : float
+            Semi-major axis of the orbit. Can be in any unit, as long as it is consistent with c.
+        c : float
+            Speed of light. Can be in any unit, as long as it is consistent with a. The time-unit for the speed of light 
+            will define the returned time-unit for the light-travel time.
+        ecc : float
+            Eccentricity of the orbit.
+        omega : float
+            Argument of periastron passage (in radians).
+        inc : string
+            Inclination of the orbit (in radians)
+        f : float
+            True anomaly at the time of transit and/or eclipse (in radians).
+        
+        Returns
+        -------
+        ltt : float
+            The light travel time, defined here as the time it takes for a photon to go from the planet at transit/eclipse to the plane in the sky where the star is located.
+
+    '''
+    # Distance from star to the planet in stellar reference system:
+    r = a*( 1. - ecc**2)/(1. + ecc*np.cos(f))
+    # Projected distance from planet to the plane the star is on the sky ('light travel distance'):
+    ltd = r * np.sin(omega + f)*np.sin(inc)
+    # Return distance divided by c to get LTT:
+    return ltd/c
+
+def calculate_tsec(period, ecc, omega, inc, t0 = None, tperi = None, winn_approximation = False):
     ''' Function to calculate the time of secondary eclipse. 
       
         This uses Halley's method (Newton-Raphson, but using second derivatives) to first find the true anomaly (f) at which secondary eclipse occurs, 
@@ -243,6 +279,14 @@ def calculate_tsec(period, ecc, omega, inc, t0 = None, tperi = None):
 
         tperi : float
             The time of periastron passage in BJD or HJD.
+
+        winn_approximation : boolean
+            If True, the approximation in Winn (2010) is used --- (only valid for not very eccentric and inclined orbits).
+
+        light_travel_time : boolean
+            If True, return in addition to the time of secondary eclipse the light-travel time from the eclipse to the center of the star 
+            in units of c/a, where a is the semi-major axis of the orbit and c is the speed of light. (i.e., to get the actual light-travel time 
+            to the host star, multiply this number by a/c).
         
         Returns
         -------
@@ -251,9 +295,10 @@ def calculate_tsec(period, ecc, omega, inc, t0 = None, tperi = None):
 
     # Use true anomaly approximation given in Winn (2010) as starting point:
     f_occ_0 = (-0.5*np.pi) - omega
-    print('Initial f_occ:',f_occ_0)
-    f_occ = optimize.newton(drsky, f_occ_0, fprime = drsky_prime, fprime2 = drsky_2prime, args = (ecc, omega, inc,))
-    print('Final f_occ:',f_occ)
+    if not winn_approximation:
+        f_occ = optimize.newton(drsky, f_occ_0, fprime = drsky_prime, fprime2 = drsky_2prime, args = (ecc, omega, inc,))
+    else:
+        f_occ = f_occ_0
     # Define the mean motion, n:
     n = 2.*np.pi/period
 
@@ -262,8 +307,10 @@ def calculate_tsec(period, ecc, omega, inc, t0 = None, tperi = None):
     if tperi is None:
         # For this, find true anomaly during transit. Use Winn (2010) as starting point:
         f_tra_0 = (np.pi/2.) - omega
-        f_tra = optimize.newton(drsky, f_tra_0, fprime = drsky_prime, fprime2 = drsky_2prime, args = (ecc, omega, inc,))
-
+        if not winn_approximation:
+            f_tra = optimize.newton(drsky, f_tra_0, fprime = drsky_prime, fprime2 = drsky_2prime, args = (ecc, omega, inc,))
+        else:
+            f_tra = f_tra_0
         # Get eccentric anomaly during transit:
         E = getE(f_tra, ecc)
 
