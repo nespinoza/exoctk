@@ -283,11 +283,6 @@ def calculate_tsec(period, ecc, omega, inc, t0 = None, tperi = None, winn_approx
         winn_approximation : boolean
             If True, the approximation in Winn (2010) is used --- (only valid for not very eccentric and inclined orbits).
 
-        light_travel_time : boolean
-            If True, return in addition to the time of secondary eclipse the light-travel time from the eclipse to the center of the star 
-            in units of c/a, where a is the semi-major axis of the orbit and c is the speed of light. (i.e., to get the actual light-travel time 
-            to the host star, multiply this number by a/c).
-        
         Returns
         -------
         tsec : float
@@ -332,7 +327,17 @@ def calculate_tsec(period, ecc, omega, inc, t0 = None, tperi = None, winn_approx
     # Get the time of secondary eclipse using the definition of the mean anomaly:
     tsec = (M/n) + tperi
 
-    # Note returned time-of-secondary eclipse is the closest to the time of periastron passage and/or time-of-transit center:
+    # Note returned time-of-secondary eclipse is the closest to the time of periastron passage and/or time-of-transit center. Check that 
+    # the returned tsec is the *next* tsec to the time of periastron or t0 (i.e., the closest *future* tsec):
+    if t0 is not None:
+        tref = t0
+    else:
+        tref = tperi
+    if tref > tsec:
+        while True:
+            tsec += period
+            if tsec > tref:
+                break
     return tsec
 
 def phase_overlap_constraint(target_name, period=None, t0=None, obs_duration=None, window_size=None):
