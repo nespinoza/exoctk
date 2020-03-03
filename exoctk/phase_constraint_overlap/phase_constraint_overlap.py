@@ -287,6 +287,11 @@ def calculate_tsec(period, ecc, omega, inc, t0 = None, tperi = None, winn_approx
         -------
         tsec : float
             The time of secondary eclipse '''
+    # Check user is not playing trick on us:
+    if period<0:
+        raise Exception('Period cannot be a negative number.')
+    if ecc<0 or ecc>1:
+        raise Exception('Eccentricity (e) is out of bounds (0 < e < 1).')
 
     # Use true anomaly approximation given in Winn (2010) as starting point:
     f_occ_0 = (-0.5*np.pi) - omega
