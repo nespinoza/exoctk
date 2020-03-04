@@ -8,7 +8,7 @@ Authors:
     Nestor Espinoza, 2020
 
 Usage:
-  calculate_constraint <target_name> [--t_start=<t0>] [--period=<p>] [--obs_duration=<obs_dur>] [--transit_duration=<trans_dur>] [--window_size=<win_size>] [--secondary] [--eccentricity=<ecc>] [--omega=<omega>] [--inclination=<inc>]
+  calculate_constraint <target_name> [--t_start=<t0>] [--period=<p>] [--obs_duration=<obs_dur>] [--transit_duration=<trans_dur>] [--window_size=<win_size>] [--secondary] [--eccentricity=<ecc>] [--omega=<omega>] [--inclination=<inc>] [--winn_approx]
   
 Arguments:
   <target_name>                     Name of target
@@ -24,6 +24,7 @@ Options:
   --eccentricity=<ecc>              The eccentricity of the orbit (needed for secondary eclipse constraints).
   --omega=<omega>                   The argument of periastron passage (needed for secondary eclipse constraints).
   --inclination=<inc>               The inclination of the orbit (needed for secondary eclipse constraints).
+  --winn_approx                     If active, instead of running the whole Kepler equation calculation, time of secondary eclipse is calculated using eq. (6) in Winn (2010; https://arxiv.org/abs/1001.2010v5)
 """
 
 import math
@@ -36,9 +37,9 @@ import requests
 import urllib
 
 from scipy import optimize
-from exoctk.utils import get_target_data
+#from exoctk.utils import get_target_data
 
-def calculate_phase(period, obsDur, winSize, t0 = None, ecc = None, omega = None, inc = None, secondary = False, w_approx = False)):
+def calculate_phase(period, obsDur, winSize, t0 = None, ecc = None, omega = None, inc = None, secondary = False, winn_approx = False):
     ''' Function to calculate the min and max phase. 
 
         Parameters
@@ -59,7 +60,7 @@ def calculate_phase(period, obsDur, winSize, t0 = None, ecc = None, omega = None
             The inclination of the orbit, in degrees (only needed for secondary eclipses).
         secondary : boolean
             If True, calculation will be done for secondary eclipses.
-        w_approx : boolean
+        winn_approx : boolean
             If True, secondary eclipse calculation will use the Winn (2010) approximation to estimate time of secondary eclipse --- (only valid for not very eccentric and inclined orbits).
 
         Returns
@@ -75,7 +76,7 @@ def calculate_phase(period, obsDur, winSize, t0 = None, ecc = None, omega = None
     else:
         deg_to_rad = (np.pi/180.)
         # Calculate time of secondary eclipse:
-        tsec = calculate_tsec(period, ecc, omega*deg_to_rad, inc*deg_to_rad, t0 = t0, winn_approximation = w_approx)
+        tsec = calculate_tsec(period, ecc, omega*deg_to_rad, inc*deg_to_rad, t0 = t0, winn_approximation = winn_approx)
         # Calculate difference in phase-space between primary and secondary eclipse (note calculate_tsec ensures tsec is 
         # *the next* secondary eclipse after t0):
         phase_diff = (tsec - t0)/period
@@ -84,6 +85,14 @@ def calculate_phase(period, obsDur, winSize, t0 = None, ecc = None, omega = None
         # Because phase runs from 0 to 1, this implies eclipse happens at phase 0.3):
         minphase = phase_diff - ((obsDur + winSize)/2.0/24/period)
         maxphase = phase_diff - ((obsDur - winSize)/2.0/24/period)
+        # Wrap the phases around 0 and 1 in case limits blow in the previous calculation (unlikely, but user might be doing 
+        # something crazy or orbit could be extremely weird such that this can reasonably happen in the future). Note this 
+        # assumes -1 < minphase,maxphase < 2:
+        if minphase < 0:
+            minphase = 1. + minphase
+        if maxphase > 1:
+            maxphase = maxphase - 1.
+
     return minphase, maxphase
 
 def calculate_obsDur(transitDur):
@@ -307,7 +316,7 @@ def calculate_tsec(period, ecc, omega, inc, t0 = None, tperi = None, winn_approx
             The transit time in BJD or HJD (will be used to get time of periastron passage).
 
         tperi : float
-            The time of periastron passage in BJD or HJD.
+            The time of periastron passage in BJD or HJD (needed if t0 is not supplied).
 
         winn_approximation : boolean
             If True, the approximation in Winn (2010) is used --- (only valid for not very eccentric and inclined orbits).
@@ -374,7 +383,7 @@ def calculate_tsec(period, ecc, omega, inc, t0 = None, tperi = None, winn_approx
                 break
     return tsec
 
-def phase_overlap_constraint(target_name, period=None, t0=None, obs_duration=None, window_size=None, secondary = False, ecc = 0., omega = 90., inc = 90.):
+def phase_overlap_constraint(target_name, period=None, t0=None, obs_duration=None, window_size=None, secondary = False, ecc = 0., omega = 90., inc = 90., winn_approx = False):
     ''' The main function to calculate the phase overlap constraints.
         We will update to allow a user to just plug in the target_name 
         and get the other variables.
@@ -399,7 +408,8 @@ def phase_overlap_constraint(target_name, period=None, t0=None, obs_duration=Non
             Argument of periastron of the orbit in degrees. Needed only if secondary is True.
         inc : float
             Inclination of the orbit in degrees. Needed only if secondary is true.
-        
+        winn_approx : boolean
+            If True, instead of running the whole Kepler equation calculation, time of secondary eclipse is calculated using eq. (6) in Winn (2010; https://arxiv.org/abs/1001.2010v5)
         Returns
         -------
         minphase : float
@@ -407,21 +417,22 @@ def phase_overlap_constraint(target_name, period=None, t0=None, obs_duration=Non
         maxphase : float
             The maximum phase constraint. '''
 
-    if obs_duration == None and (not secondary):
+    if obs_duration == None:
         if period == None:
             data = get_target_data(target_name)
             
             period = data['orbital_period']
             transit_dur = data['transit_duration']
             t0 = data['transit_time']
+        if secondary:
+            # Factor from equation (16) in Winn (2010). This is, of course, an approximation.
+            # TODO: Implement equation (13) in the same paper. Needs optimization plus numerical integration.
+            factor = np.sqrt(1. - ecc**2)/(1. - ecc*np.sin(omega*(np.pi/180.)))
+            transit_dur = transit_dur*factor
 
         obs_duration = calculate_obsDur(transit_dur)
 
-    if secondary:
-        if (period is None) or (t0 is None) or (obs_duration is None) or (window_size is None) or (ecc is None) or (omega is None) or (inc is None):
-            raise Exception('User needs to input period, t0, duration, window size, eccentricity, omega and inclination for secondary eclipse calculations.')
-
-    minphase, maxphase = calculate_phase(period, obs_duration, window_size, t0, ecc, omega, inc, secondary)
+    minphase, maxphase = calculate_phase(period, obs_duration, window_size, t0 = t0, ecc = ecc, omega = omega, inc = inc, secondary = secondary, winn_approx = winn_approx)
     
     # Is this the return that we want? Do we need to use t0 for something? 
     # NE: Not needed, because by defaut APT assumes phase = 1 is where the transit happens.
@@ -433,7 +444,9 @@ if __name__ == '__main__':
 
     # First, save the secondary flag (which is a boolean):
     secondary = args['--secondary']
-    # Convert all entries from strs to floats (this will convert the --secondary flag above, but that's OK):
+    # Save the winn_approx flag as well:
+    winn_approx = args['--winn_approx']
+    # Convert all entries from strs to floats (this will convert the --secondary arg above, but that's OK):
     for k,v in args.items():
         try:
             args[k] = float(v)
@@ -445,8 +458,8 @@ if __name__ == '__main__':
     if secondary and ((args['--eccentricity'] is None) or (args['--inclination'] is None) or (args['--omega'] is None)):
         raise Exception('If --secondary, eccentricity, omega and inclination have to be supplied (e.g., --eccentricity = 0.1 --omega = 30.1 --inclination=89.2)')
     
-    phase_overlap_constraint(args['<target_name>'], args['--period'], 
-                             args['--t_start'], args['--transit_duration'], 
-                             args['--window_size'], secondary,
-                             args['--eccentricity'], args['--omega'],
-                             args['--inclination'])
+    phase_overlap_constraint(args['<target_name>'], period = args['--period'], 
+                             t0 = args['--t_start'], obs_duration = args['--transit_duration'], 
+                             window_size = args['--window_size'], secondary = secondary,
+                             ecc = args['--eccentricity'], omega = args['--omega'],
+                             inc = args['--inclination'], winn_approx = winn_approx)
