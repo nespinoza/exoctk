@@ -8,7 +8,7 @@ Authors:
     Nestor Espinoza, 2020
 
 Usage:
-  calculate_constraint <target_name> [--t_start=<t0>] [--period=<p>] [--obs_duration=<obs_dur>] [--transit_duration=<trans_dur>] [--window_size=<win_size>]
+  calculate_constraint <target_name> [--t_start=<t0>] [--period=<p>] [--obs_duration=<obs_dur>] [--transit_duration=<trans_dur>] [--window_size=<win_size>] [--secondary] [--eccentricity=<ecc>] [--omega=<omega>] [--inclination=<inc>]
   
 Arguments:
   <target_name>                     Name of target
@@ -20,7 +20,7 @@ Options:
   --obs_duration=<obs_dur>          The duration of the observation in hours.
   --transit_duration=<trans_dur>    The duration of the transit in hours.
   --window_size=<win_size>          The window size of the transit in hours [default: 1.0]
-  -secondary                        If active, calculation will calculate phases for secondary eclipses (needs additional parameters)
+  --secondary                       If active, calculate phases for secondary eclipses (user needs to supply eccentricity, omega and inclination).
   --eccentricity=<ecc>              The eccentricity of the orbit (needed for secondary eclipse constraints).
   --omega=<omega>                   The argument of periastron passage (needed for secondary eclipse constraints).
   --inclination=<inc>               The inclination of the orbit (needed for secondary eclipse constraints).
@@ -38,7 +38,7 @@ import urllib
 from scipy import optimize
 from exoctk.utils import get_target_data
 
-def calculate_phase(period, obsDur, winSize):
+def calculate_phase(period, obsDur, winSize, t0 = None, ecc = None, omega = None, inc = None, secondary = False, w_approx = False)):
     ''' Function to calculate the min and max phase. 
 
         Parameters
@@ -49,6 +49,18 @@ def calculate_phase(period, obsDur, winSize):
             The duration of the observation in hours.
         winSize : float
             The window size of transit in hours. Default is 1 hour.
+        t0 : float
+            The time of (primary) transit center (only needed for secondary eclipses).
+        ecc : float
+            The eccentricity of the orbit (only needed for secondary eclipses).
+        omega : float
+            The argument of periastron passage, in degrees (only needed for secondary eclipses).
+        inc : float
+            The inclination of the orbit, in degrees (only needed for secondary eclipses).
+        secondary : boolean
+            If True, calculation will be done for secondary eclipses.
+        w_approx : boolean
+            If True, secondary eclipse calculation will use the Winn (2010) approximation to estimate time of secondary eclipse --- (only valid for not very eccentric and inclined orbits).
 
         Returns
         -------
@@ -57,9 +69,21 @@ def calculate_phase(period, obsDur, winSize):
         maxphase : float
             The maximum phase constraint. '''
 
-    minphase = 1.0 - ((obsDur + winSize)/2.0/24/period)
-    maxphase = 1.0 - ((obsDur - winSize)/2.0/24/period)
-    
+    if not secondary:
+        minphase = 1.0 - ((obsDur + winSize)/2.0/24/period)
+        maxphase = 1.0 - ((obsDur - winSize)/2.0/24/period)
+    else:
+        deg_to_rad = (np.pi/180.)
+        # Calculate time of secondary eclipse:
+        tsec = calculate_tsec(period, ecc, omega*deg_to_rad, inc*deg_to_rad, t0 = t0, winn_approximation = w_approx)
+        # Calculate difference in phase-space between primary and secondary eclipse (note calculate_tsec ensures tsec is 
+        # *the next* secondary eclipse after t0):
+        phase_diff = (tsec - t0)/period
+        # Estimate minphase and maxphase centered around this phase (thinking here is that, e.g., if phase_diff is 0.3 
+        # then eclipse happens at 0.3 after 1 (being the latter by definition the time of primary eclipse --- i.e., transit). 
+        # Because phase runs from 0 to 1, this implies eclipse happens at phase 0.3):
+        minphase = phase_diff - ((obsDur + winSize)/2.0/24/period)
+        maxphase = phase_diff - ((obsDur - winSize)/2.0/24/period)
     return minphase, maxphase
 
 def calculate_obsDur(transitDur):
@@ -350,7 +374,7 @@ def calculate_tsec(period, ecc, omega, inc, t0 = None, tperi = None, winn_approx
                 break
     return tsec
 
-def phase_overlap_constraint(target_name, period=None, t0=None, obs_duration=None, window_size=None):
+def phase_overlap_constraint(target_name, period=None, t0=None, obs_duration=None, window_size=None, secondary = False, ecc = 0., omega = 90., inc = 90.):
     ''' The main function to calculate the phase overlap constraints.
         We will update to allow a user to just plug in the target_name 
         and get the other variables.
@@ -367,6 +391,14 @@ def phase_overlap_constraint(target_name, period=None, t0=None, obs_duration=Non
             The window size of transit in hours. Default is 1 hour.
         target_name : string
             The name of the target transit. 
+        secondary : boolean
+            If True, phase constraint will be the one for the secondary eclipse. Default is primary (i.e., transits).
+        ecc : float
+            Eccentricity of the orbit. Needed only if secondary is True.
+        omega : float
+            Argument of periastron of the orbit in degrees. Needed only if secondary is True.
+        inc : float
+            Inclination of the orbit in degrees. Needed only if secondary is true.
         
         Returns
         -------
@@ -375,7 +407,7 @@ def phase_overlap_constraint(target_name, period=None, t0=None, obs_duration=Non
         maxphase : float
             The maximum phase constraint. '''
 
-    if obs_duration == None:
+    if obs_duration == None and (not secondary):
         if period == None:
             data = get_target_data(target_name)
             
@@ -385,7 +417,11 @@ def phase_overlap_constraint(target_name, period=None, t0=None, obs_duration=Non
 
         obs_duration = calculate_obsDur(transit_dur)
 
-    minphase, maxphase = calculate_phase(period, obs_duration, window_size)
+    if secondary:
+        if (period is None) or (t0 is None) or (obs_duration is None) or (window_size is None) or (ecc is None) or (omega is None) or (inc is None):
+            raise Exception('User needs to input period, t0, duration, window size, eccentricity, omega and inclination for secondary eclipse calculations.')
+
+    minphase, maxphase = calculate_phase(period, obs_duration, window_size, t0, ecc, omega, inc, secondary)
     
     # Is this the return that we want? Do we need to use t0 for something? 
     # NE: Not needed, because by defaut APT assumes phase = 1 is where the transit happens.
@@ -395,17 +431,22 @@ def phase_overlap_constraint(target_name, period=None, t0=None, obs_duration=Non
 if __name__ == '__main__':
     args = docopt(__doc__, version='0.1')
 
-    # Ugh, docopt datatypes are funky.
-    # This converts entries from strs to floats
+    # First, save the secondary flag (which is a boolean):
+    secondary = args['--secondary']
+    # Convert all entries from strs to floats (this will convert the --secondary flag above, but that's OK):
     for k,v in args.items():
         try:
             args[k] = float(v)
         except (ValueError, TypeError):
             # Handles None and char strings.
             continue
+    # Check that if the user wants to get secondary eclipse constraints, eccentricity, omega and inclination has also been 
+    # supplied:
+    if secondary and ((args['--eccentricity'] is None) or (args['--inclination'] is None) or (args['--omega'] is None)):
+        raise Exception('If --secondary, eccentricity, omega and inclination have to be supplied (e.g., --eccentricity = 0.1 --omega = 30.1 --inclination=89.2)')
     
     phase_overlap_constraint(args['<target_name>'], args['--period'], 
                              args['--t_start'], args['--transit_duration'], 
-                             args['--window_size'], args['-secondary'],
+                             args['--window_size'], secondary,
                              args['--eccentricity'], args['--omega'],
                              args['--inclination'])
