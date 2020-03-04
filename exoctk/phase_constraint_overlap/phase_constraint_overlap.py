@@ -1,10 +1,11 @@
 #! /usr/bin/env python
 """Phase contraint overlap tool. This tool calculates the minimum and maximum phase of
-the transit based on parameters provided by the user.
+the primary or secondary transit (by default, primary) based on parameters provided by the user.
 
 Authors:
     Catherine Martlin, 2018
     Mees Fix, 2018
+    Nestor Espinoza, 2020
 
 Usage:
   calculate_constraint <target_name> [--t_start=<t0>] [--period=<p>] [--obs_duration=<obs_dur>] [--transit_duration=<trans_dur>] [--window_size=<win_size>]
@@ -19,6 +20,10 @@ Options:
   --obs_duration=<obs_dur>          The duration of the observation in hours.
   --transit_duration=<trans_dur>    The duration of the transit in hours.
   --window_size=<win_size>          The window size of the transit in hours [default: 1.0]
+  -secondary                        If active, calculation will calculate phases for secondary eclipses (needs additional parameters)
+  --eccentricity=<ecc>              The eccentricity of the orbit (needed for secondary eclipse constraints).
+  --omega=<omega>                   The argument of periastron passage (needed for secondary eclipse constraints).
+  --inclination=<inc>               The inclination of the orbit (needed for secondary eclipse constraints).
 """
 
 import math
@@ -383,6 +388,7 @@ def phase_overlap_constraint(target_name, period=None, t0=None, obs_duration=Non
     minphase, maxphase = calculate_phase(period, obs_duration, window_size)
     
     # Is this the return that we want? Do we need to use t0 for something? 
+    # NE: Not needed, because by defaut APT assumes phase = 1 is where the transit happens.
     print('MINIMUM PHASE: {}, MAXIMUM PHASE: {}'.format(minphase, maxphase))
 
 # Need to make entry point for this!
@@ -400,4 +406,6 @@ if __name__ == '__main__':
     
     phase_overlap_constraint(args['<target_name>'], args['--period'], 
                              args['--t_start'], args['--transit_duration'], 
-                             args['--window_size'])
+                             args['--window_size'], args['-secondary'],
+                             args['--eccentricity'], args['--omega'],
+                             args['--inclination'])
