@@ -383,7 +383,7 @@ def calculate_tsec(period, ecc, omega, inc, t0 = None, tperi = None, winn_approx
                 break
     return tsec
 
-def phase_overlap_constraint(target_name, period=None, t0=None, obs_duration=None, window_size=None, secondary = False, ecc = 0., omega = 90., inc = 90., winn_approx = False):
+def phase_overlap_constraint(target_name, period=None, t0=None, obs_duration=None, transit_dur=None, window_size=None, secondary = False, ecc = 0., omega = 90., inc = 90., winn_approx = False):
     ''' The main function to calculate the phase overlap constraints.
         We will update to allow a user to just plug in the target_name 
         and get the other variables.
@@ -396,6 +396,8 @@ def phase_overlap_constraint(target_name, period=None, t0=None, obs_duration=Non
             The start time in BJD or HJD.
         obs_duration : float
             The duration of the observation in hours.
+        transit_dur : float
+            The duration of the transit/eclipse in hours.
         winSize : float
             The window size of transit in hours. Default is 1 hour.
         target_name : string
@@ -422,13 +424,15 @@ def phase_overlap_constraint(target_name, period=None, t0=None, obs_duration=Non
             data = get_target_data(target_name)
             
             period = data['orbital_period']
-            transit_dur = data['transit_duration']
             t0 = data['transit_time']
-        if secondary:
-            # Factor from equation (16) in Winn (2010). This is, of course, an approximation.
-            # TODO: Implement equation (13) in the same paper. Needs optimization plus numerical integration.
-            factor = np.sqrt(1. - ecc**2)/(1. - ecc*np.sin(omega*(np.pi/180.)))
-            transit_dur = transit_dur*factor
+            # If transit/eclipse duration not supplied by the user, extract it from the get_target_data function:
+            if transit_dur is None:
+                transit_dur = data['transit_duration']
+                if secondary:
+                # Factor from equation (16) in Winn (2010). This is, of course, an approximation.
+                # TODO: Implement equation (13) in the same paper. Needs optimization plus numerical integration.
+                    factor = np.sqrt(1. - ecc**2)/(1. - ecc*np.sin(omega*(np.pi/180.)))
+                    transit_dur = transit_dur*factor
 
         obs_duration = calculate_obsDur(transit_dur)
 
@@ -459,7 +463,8 @@ if __name__ == '__main__':
         raise Exception('If --secondary, eccentricity, omega and inclination have to be supplied (e.g., --eccentricity = 0.1 --omega = 30.1 --inclination=89.2)')
     
     phase_overlap_constraint(args['<target_name>'], period = args['--period'], 
-                             t0 = args['--t_start'], obs_duration = args['--transit_duration'], 
+                             t0 = args['--t_start'], obs_duration = args['--obs_duration'],
+                             transit_dur = args['--transit_duration'],
                              window_size = args['--window_size'], secondary = secondary,
                              ecc = args['--eccentricity'], omega = args['--omega'],
                              inc = args['--inclination'], winn_approx = winn_approx)
