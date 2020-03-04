@@ -8,12 +8,11 @@ import astropy.constants as constants
 from astropy.coordinates import SkyCoord
 from astropy.extern.six.moves import StringIO
 import astropy.table as at
+from astropy.time import Time
 import astropy.units as u
 from bokeh.resources import INLINE
 from bokeh.util.string import encode_utf8
 from bokeh.embed import components
-from bokeh.models import Range1d
-from bokeh.models.widgets import Panel, Tabs
 from bokeh.plotting import figure
 import flask
 from flask import Flask, Response
@@ -36,6 +35,7 @@ from exoctk.groups_integrations.groups_integrations import perform_calculation
 from exoctk.limb_darkening import limb_darkening_fit as lf
 from exoctk.utils import find_closest, filter_table, get_env_variables, get_target_data, get_canonical_name
 from exoctk.modelgrid import ModelGrid
+from exoctk.phase_constraint_overlap.phase_constraint_overlap import phase_overlap_constraint, calculate_obsDur
 
 import log_exoctk
 from svo_filters import svo
@@ -158,10 +158,7 @@ def limb_darkening():
         form.modeldir.data = [j for i, j in form.modeldir.choices if i == form.modeldir.data][0]
 
         # Grism details
-        if ('.G' in form.bandpass.data.upper() and 'GAIA' not in form.bandpass.data.upper()) or form.bandpass.data.lower() == 'tophat':
-            kwargs = {'n_bins': form.n_bins.data, 'wave_min': form.wave_min.data*u.um, 'wave_max': form.wave_max.data*u.um}
-        else:
-            kwargs = {}
+        kwargs = {'n_bins': form.n_bins.data, 'wave_min': form.wave_min.data*u.um, 'wave_max': form.wave_max.data*u.um}
 
         # Make filter object and plot
         bandpass = svo.Filter(form.bandpass.data, **kwargs)
@@ -182,24 +179,8 @@ def limb_darkening():
         for prof in form.profiles.data:
             ld.calculate(*star_params, prof, mu_min=float(form.mu_min.data), bandpass=bandpass)
 
-        # Draw a figure for each wavelength bin
-        tabs = []
-        for wav in np.unique(ld.results['wave_eff']):
-
-            # Plot it
-            TOOLS = 'box_zoom, box_select, crosshair, reset, hover'
-            fig = figure(tools=TOOLS, x_range=Range1d(0, 1), y_range=Range1d(0, 1),
-                        plot_width=800, plot_height=400)
-            ld.plot(wave_eff=wav, fig=fig)
-
-            # Plot formatting
-            fig.legend.location = 'bottom_right'
-            fig.xaxis.axis_label = 'mu'
-            fig.yaxis.axis_label = 'Intensity'
-
-            tabs.append(Panel(child=fig, title=str(wav)))
-
-        final = Tabs(tabs=tabs)
+        # Draw tabbed figure
+        final = ld.plot_tabs()
 
         # Get HTML
         script, div = components(final)
@@ -221,7 +202,8 @@ def limb_darkening():
             co_cols = [c for c in ld.results.colnames if (c.startswith('c') or
                     c.startswith('e')) and len(c) == 2 and not
                     np.all([np.isnan(i) for i in table[c]])]
-            table = table[['wave_min', 'wave_max'] + co_cols]
+            table = table[['wave_eff', 'wave_min', 'wave_max'] + co_cols]
+            table.rename_column('wave_eff', '\(\lambda_\mbox{eff}\hspace{5px}(\mu m)\)')
             table.rename_column('wave_min', '\(\lambda_\mbox{min}\hspace{5px}(\mu m)\)')
             table.rename_column('wave_max', '\(\lambda_\mbox{max}\hspace{5px}(\mu m)\)')
 
@@ -460,7 +442,7 @@ def contam_visibility():
     if form.mode_submit.data:
 
         # Update the button
-        if form.inst.data != 'NIRISS':
+        if (form.inst.data == 'MIRI') or (form.inst.data == 'NIRSpec'):
             form.calculate_contam_submit.disabled = True
         else:
             form.calculate_contam_submit.disabled = False
@@ -482,19 +464,15 @@ def contam_visibility():
 
             # Make plot
             title = form.targname.data or ', '.join([form.ra.data, form.dec.data])
-            pG, pB, dates, vis_plot, table = vpa.using_gtvt(str(form.ra.data), str(form.dec.data), form.inst.data.split(' ')[0])
+            pG, pB, dates, vis_plot, table, badPAs = vpa.using_gtvt(str(form.ra.data),
+                                                                    str(form.dec.data),
+                                                                    form.inst.data.split(' ')[0],
+                                                                    targetName=str(title))
 
             # Make output table
-            vers = '0.3'
+            vers = '1.0'
             today = datetime.datetime.now()
             fh = StringIO()
-            fh.write('# Hi! This is your Visibility output file for... \n')
-            fh.write('# Target: {} \n'.format(form.targname.data))
-            fh.write('# Instrument: {} \n'.format(form.inst.data))
-            fh.write('# \n')
-            fh.write('# This file was generated using ExoCTK v{} on {} \n'.format(vers, today))
-            fh.write('# Visit our GitHub: https://github.com/ExoCTK/exoctk \n')
-            fh.write('# \n')
             table.write(fh, format='csv', delimiter=',')
             visib_table = fh.getvalue()
 
@@ -510,9 +488,9 @@ def contam_visibility():
             # Make plot
             TOOLS = 'crosshair, reset, hover, save'
             fig = figure(tools=TOOLS, plot_width=800, plot_height=400, x_axis_type='datetime', title=title)
-            fh = StringIO()
-            table.write(fh, format='ascii')
-            visib_table = fh.getvalue()
+            #fh = StringIO()
+            #table.write(fh, format='ascii')
+            #visib_table = fh.getvalue()
 
             # Format x axis
             day0 = datetime.date(2019, 6, 1)
@@ -533,8 +511,10 @@ def contam_visibility():
                 ra_hms, dec_dms = ra_dec.split(' ')[0], ra_dec.split(' ')[1]
 
                 # Make field simulation
-                contam_cube = fs.sossFieldSim(ra_hms, dec_dms, binComp=form.companion.data)
-                contam_plot = cf.contam(contam_cube, title, paRange=[int(form.pa_min.data), int(form.pa_max.data)], badPA=pB, fig='bokeh')
+
+                contam_cube = fs.fieldSim(ra_hms, dec_dms, form.inst.data, binComp=form.companion.data)
+
+                contam_plot = cf.contam(contam_cube, form.inst.data, targetName=str(title), paRange=[int(form.pa_min.data), int(form.pa_max.data)], badPAs=badPAs, fig='bokeh')
 
                 # Get scripts
                 contam_js = INLINE.render_js()
@@ -798,6 +778,46 @@ def atmospheric_retrievals():
 
     return render_template('atmospheric_retrievals.html')
 
+
+@app_exoctk.route('/phase_constraint', methods=['GET', 'POST'])
+def phase_constraint():
+    # Load default form
+    form = fv.PhaseConstraint()
+
+    # Reload page with stellar data from ExoMAST
+    if form.resolve_submit.data:
+        if form.targname.data.strip() != '':
+            try:
+                # Resolve the target in exoMAST
+                form.targname.data = get_canonical_name(form.targname.data)
+                data, target_url = get_target_data(form.targname.data)
+
+                # Update the form data
+                form.orbital_period.data = data.get('orbital_period')
+                
+                t_time = Time(data.get('transit_time'), format='mjd')
+                form.transit_time.data = t_time.jd
+
+                form.observation_duration.data = calculate_obsDur(data.get('transit_duration')*24.0)
+
+                form.target_url.data = str(target_url)
+
+                return render_template('phase_constraint.html', form=form)
+                    
+            except:
+                form.target_url.data = ''
+                form.targname.errors = ["Sorry, could not resolve '{}' in exoMAST.".format(form.targname.data)]
+
+    if form.validate_on_submit() and form.calculate_submit.data:
+        minphase, maxphase = phase_overlap_constraint(target_name=form.targname.data,
+                                                      period=form.orbital_period.data, 
+                                                      obs_duration=form.observation_duration.data, 
+                                                      window_size=form.window_size.data)
+        form.minimum_phase.data = minphase
+        form.maximum_phase.data = maxphase
+
+    # Send it back to the main page
+    return render_template('phase_constraint.html', form=form)
 
 if __name__ == '__main__':
     # os.chmod('/internal/data1/app_data/.astropy/cache/', 777)

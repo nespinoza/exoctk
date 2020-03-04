@@ -8,6 +8,7 @@ Authors:
     Nestor Espinoza, 2020
 
 Usage:
+
   calculate_constraint <target_name> [--t_start=<t0>] [--period=<p>] [--obs_duration=<obs_dur>] [--transit_duration=<trans_dur>] [--window_size=<win_size>] [--secondary] [--eccentricity=<ecc>] [--omega=<omega>] [--inclination=<inc>] [--winn_approx]
   
 Arguments:
@@ -45,7 +46,7 @@ def calculate_phase(period, obsDur, winSize, t0 = None, ecc = None, omega = None
         Parameters
         ----------
         period : float
-            The period of the transit in days. 
+            The period of the transit in days.
         obsdur : float
             The duration of the observation in hours.
         winSize : float
@@ -92,11 +93,10 @@ def calculate_phase(period, obsDur, winSize, t0 = None, ecc = None, omega = None
             minphase = 1. + minphase
         if maxphase > 1:
             maxphase = maxphase - 1.
-
     return minphase, maxphase
 
 def calculate_obsDur(transitDur):
-    ''' Function to calculate the min and max phase. 
+    ''' Function to calculate the min and max phase.
 
         Parameters
         ----------
@@ -108,7 +108,7 @@ def calculate_obsDur(transitDur):
         obsdur : float
             The duration of the observation in hours. '''
 
-    obsDur = np.min((6, 3*transitDur+1))
+    obsDur = np.max((6, 3*transitDur+1))
 
     return obsDur
 
@@ -385,13 +385,13 @@ def calculate_tsec(period, ecc, omega, inc, t0 = None, tperi = None, winn_approx
 
 def phase_overlap_constraint(target_name, period=None, t0=None, obs_duration=None, transit_dur=None, window_size=None, secondary = False, ecc = 0., omega = 90., inc = 90., winn_approx = False):
     ''' The main function to calculate the phase overlap constraints.
-        We will update to allow a user to just plug in the target_name 
+        We will update to allow a user to just plug in the target_name
         and get the other variables.
-        
+
         Parameters
         ----------
         period : float
-            The period of the transit in days. 
+            The period of the transit in days.
         t0 : float
             The start time in BJD or HJD.
         obs_duration : float
@@ -412,6 +412,7 @@ def phase_overlap_constraint(target_name, period=None, t0=None, obs_duration=Non
             Inclination of the orbit in degrees. Needed only if secondary is true.
         winn_approx : boolean
             If True, instead of running the whole Kepler equation calculation, time of secondary eclipse is calculated using eq. (6) in Winn (2010; https://arxiv.org/abs/1001.2010v5)
+
         Returns
         -------
         minphase : float
@@ -434,6 +435,9 @@ def phase_overlap_constraint(target_name, period=None, t0=None, obs_duration=Non
                     factor = np.sqrt(1. - ecc**2)/(1. - ecc*np.sin(omega*(np.pi/180.)))
                     transit_dur = transit_dur*factor
 
+    if obs_duration == None:
+        data, _  = get_target_data(target_name)
+        transit_dur = data['transit_duration'] *24.0
         obs_duration = calculate_obsDur(transit_dur)
 
     minphase, maxphase = calculate_phase(period, obs_duration, window_size, t0 = t0, ecc = ecc, omega = omega, inc = inc, secondary = secondary, winn_approx = winn_approx)
@@ -441,6 +445,7 @@ def phase_overlap_constraint(target_name, period=None, t0=None, obs_duration=Non
     # Is this the return that we want? Do we need to use t0 for something? 
     # NE: Not needed, because by defaut APT assumes phase = 1 is where the transit happens.
     print('MINIMUM PHASE: {}, MAXIMUM PHASE: {}'.format(minphase, maxphase))
+    return minphase, maxphase
 
 # Need to make entry point for this!
 if __name__ == '__main__':
@@ -457,6 +462,7 @@ if __name__ == '__main__':
         except (ValueError, TypeError):
             # Handles None and char strings.
             continue
+
     # Check that if the user wants to get secondary eclipse constraints, eccentricity, omega and inclination has also been 
     # supplied:
     if secondary and ((args['--eccentricity'] is None) or (args['--inclination'] is None) or (args['--omega'] is None)):

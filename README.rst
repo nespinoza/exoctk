@@ -11,13 +11,15 @@ ExoCTK is an open-source, modular data analysis package focused primarily on atm
 
 * Contamination and Visibility Calculator
 * Integrations and Groups Calculator
-* Transit Light-Curve Fitter 
+* Transit Light-Curve Fitter
 * Limb Darkening Calculator
-* Atmospheric Forward Modeling - Currently only available through the _`website <https://exoctk.stsci.edu/fortney>`_. 
+* Atmospheric Retrievals
+* Phase Constraint Calculator
+* Atmospheric Forward Modeling
 
-For more information on each package visit our documentation _`website <https://exoctk.readthedocs.io/en/latest/>`_. 
+For more information on each package visit our documentation at `readthedocs <https://exoctk.readthedocs.io/en/latest/>`_.
 
-Most packages are also available through interactive tools at our _`website <https://exoctk.stsci.edu/>`_. 
+Most packages are also available through interactive tools at our `web portal <https://exoctk.stsci.edu/>`_.
 
 Transit Light-Curve Fitter
 -------------------------
@@ -98,14 +100,16 @@ file for convenience. This is an example of an ascii file downloaded for the
 Kelt-8 target using NIRISS. It lists the position angles (for the instrument
 and JWST) with their corresponding dates.
 
-
-Atmopsheric Retrievals
+Atmospheric Retrievals
 ----------------------
 
-The ``atmospheric_retrievals`` subpackage within the ``exoctk`` package currently contains a module for performing retrievals via the `PLATON <https://platon.readthedocs.io/en/latest/>`_ package. `This Jupyter notebook <https://github.com/exoctk/exoctk/blob/master/exoctk/notebooks/platon_wrapper_demo.ipynb>`_ contains a demo of how to use the `platon_wrapper <https://github.com/exoctk/exoctk/blob/master/exoctk/atmospheric_retrievals/platon_wrapper.py>`_ module.
+The ``atmospheric_retrievals`` subpackage within the ``exoctk`` package currently contains a module for performing retrievals via the `PLATON <https://platon.readthedocs.io/en/latest/>`_ package. `This Jupyter notebook <https://github.com/ExoCTK/exoctk/blob/master/exoctk/notebooks/atmospheric_retrievals_demo.ipynb>`_ contains a demo of how to use the `platon_wrapper <https://github.com/ExoCTK/exoctk/blob/master/exoctk/atmospheric_retrievals/platon_wrapper.py>`_ module.
 
-Users who wish to use the ``atmospheric_retrievals`` tools may do so by installing the ``exoctk`` package.  Please see the `installation instructions <https://github.com/exoctk/exoctk/tree/master#installation>`_ for further details.
+Users who wish to use the ``atmospheric_retrievals`` tools may do so by installing the ``exoctk`` package.  Please see the `installation instructions <https://github.com/ExoCTK/exoctk#installation>`_ for further details.
 
+Phase Constraint Calculator
+-------------------------
+The Phase Constraint Calculator provides a simple interface for calculating the JWST observation start window. The calculation currently only applies to transits, though one can subtract 0.5 from the phase values to compute the eclipse observation start window for planets on circular orbits. Enter the minimum and maximum phase values into the APT special requirements section when planning your observations.
 
 Installation
 ------------
@@ -123,32 +127,29 @@ You must first have a working installation of ``anaconda`` or ``miniconda`` for 
 Obtain the ``exoctk`` Package
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-To obtain the ``exoctk`` package with the necessary environment files, you can either install the package via ``pip``:
-
-::
-
-  pip install exoctk
-
-or, clone the repository directly from GitHub:
+To obtain the ``exoctk`` package with the necessary environment files, clone the repository directly from GitHub:
 
 ::
 
   git clone https://github.com/ExoCTK/exoctk.git
   cd exoctk
-  python setup.py [install|devlop]
 
-Obtain the ``exoctk`` Data 
+Obtain the ``exoctk`` Data
 ~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-To obtain the ``exoctk`` data, visit the `ExoCTK website <https://exoctk.stsci.edu/>`_ and navigate to the "ExoCTK Data Download" tab. 
+The ``exoctk`` data package will be available through the MAST portal soon!
+Until then...
+
+To obtain the ``exoctk`` data, visit the `ExoCTK website <https://exoctk.stsci.edu/>`_ and navigate to the "ExoCTK Data Download" tab.
 This will start a download of a zipped package of all the data you need to run
-``exoctk``. 
+``exoctk``. (Due to the large size of the data, the download may fail without a
+hard line internet connection.)
 
 Because it is a fairly hefty data download, you'll need to be thoughtful about
-how you unzip it. 
+how you unzip it.
 
 - For Mac OS, use the default application to unzip the file (Archive Utility or
-  similar depending on version.) 
+  similar depending on version.)
 - For Windows, use the default application to unzip the file (Extract or
   similar depending on version.)
 - For Linux, use the java unzip :
@@ -157,10 +158,14 @@ how you unzip it.
 
     jar -xf exoctk_data.zip
 
-- If you try to use ``unzip``, ``7zip``, or ``gzip``, the files will likely be corrupted. 
+- If you try to use ``unzip``, ``7zip``, or ``gzip``, the files will likely be corrupted.
 
 The data will unzip in the appropriate structure, with the top layer
-``exoctk_data``. Export an environment variable for ``EXOCTK_DATA``. 
+``exoctk_data``.
+
+An alternative way to obtain the data is to execute the ``exoctk.utils.download_exoctk_data()`` function.  This function will download a series of compressed files from Box, extract the files, and organize them into the ``exoctk_data/`` directory.  Note that this can only be done once the ``exoctk`` package has been fully installed (see instructions below).
+
+Lastly, export an environment variable for ``EXOCTK_DATA``.
 
 - For Mac OS/Linux, add the line
 
@@ -168,9 +173,9 @@ The data will unzip in the appropriate structure, with the top layer
 
     export EXOCTK_DATA='/path/to/your/unzipped/directory/exoctk_data/'
 
-to your `.bashrc` or `.bash_profile`. 
+to your `.bashrc` or `.bash_profile`.
 
-- For Windows, add an evironment variable using System Utility. 
+- For Windows, add an environment variable using System Utility.
 
 
 Environment Installation
@@ -209,14 +214,8 @@ where again, ``<PYTHON_VERSION>`` is the version of python you are using (e.g. `
 Package Installation
 ~~~~~~~~~~~~~~~~~~~~
 
-In order to install the ``exoctk`` package within the newly-created ``conda`` environment, one must re-install the package, either via ``pip``:
-
-::
-
-  pip install exoctk
-
-
-or by running the `exoctk` setup script:
+In order to install the ``exoctk`` package within the newly-created ``conda``
+environment, run the `exoctk` setup script:
 
 ::
 
@@ -233,4 +232,4 @@ If you find that the `exoctk` `conda` is missing a required dependency, please f
 Want to stay up-to-date with our releases and updates?
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-Subscribe to our newsletter by sending an email with a blank body and subject to `exoctk-news-subscribe-request@maillist.stsci.edu` from the email you want to enroll. You should then receive a confirmation email with instructions on how to confirm your subscription, please be sure to do so within 48 hours.
+Subscribe to our newsletter by sending an email with a blank body and subject to ``exoctk-news-subscribe-request@maillist.stsci.edu`` from the email you want to enroll. You should then receive a confirmation email with instructions on how to confirm your subscription, please be sure to do so within 48 hours.
